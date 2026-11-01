@@ -19,11 +19,14 @@ kill_pid() {
   local name=$2
   if kill -0 "$pid" 2>/dev/null; then
     echo "🛑 Stopping $name (PID $pid)..."
-    kill "$pid"
+    # Kill child processes if any
+    pkill -P "$pid" 2>/dev/null || true
+    kill "$pid" 2>/dev/null || true
     sleep 1
     if kill -0 "$pid" 2>/dev/null; then
       echo "⚡ Force killing $name (PID $pid)..."
-      kill -9 "$pid"
+      pkill -9 -P "$pid" 2>/dev/null || true
+      kill -9 "$pid" 2>/dev/null || true
     fi
   else
     echo "⚠️  $name (PID $pid) not running."

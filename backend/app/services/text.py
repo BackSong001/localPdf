@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import sitecustomize  # Ensure pymupdf patches are applied
 import pymupdf
 
 # Monkey‑patch pymupdf.Document.save to gracefully handle zero‑page PDFs.

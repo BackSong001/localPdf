@@ -7,9 +7,7 @@ from uuid import uuid4
 
 import pymupdf
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import create_app
 from app.services.pdf_builder import build_pdf
 from tests.api_helpers import image_bytes, upload, wait_for_job
 from tests.helpers import center_pixel, extract_page_image
@@ -332,7 +330,7 @@ def test_tc_api_009_created_at_is_iso_utc(client) -> None:
 
     created_at = created["created_at"]
     assert created_at.endswith("Z")
-    datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    datetime.fromisoformat(created_at)
 
 
 def test_tc_api_010_wrong_multipart_field_is_empty_upload(client) -> None:

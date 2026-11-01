@@ -25,21 +25,24 @@ source .venv/bin/activate
 # ---------------------------------------------------------------------------
 # Start backend (FastAPI) – log to backend.log
 # ---------------------------------------------------------------------------
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
+setsid "$PROJECT_ROOT/.venv/bin/uvicorn" app.main:app --app-dir backend --host 127.0.0.1 --port 8000 </dev/null > "$PROJECT_ROOT/backend.log" 2>&1 &
 BACKEND_PID=$!
-echo "✅ Backend started (PID $BACKEND_PID), logs: $PROJECT_ROOT/backend.log"
 
 # ---------------------------------------------------------------------------
 # Start frontend (Vite dev server) – log to frontend.log
 # ---------------------------------------------------------------------------
-cd frontend
-npm run dev > ../frontend.log 2>&1 &
+cd "$PROJECT_ROOT/frontend"
+setsid npm run dev </dev/null > "$PROJECT_ROOT/frontend.log" 2>&1 &
 FRONTEND_PID=$!
-echo "✅ Frontend started (PID $FRONTEND_PID), logs: $PROJECT_ROOT/frontend.log"
 
 # Return to project root and store PIDs
 cd "$PROJECT_ROOT"
 echo "$BACKEND_PID $FRONTEND_PID" > "$PID_FILE"
 chmod 600 "$PID_FILE"
 
-echo "🚀 All services are up. PID file stored at $PID_FILE"
+echo "=========================================="
+echo "• 백엔드 API (FastAPI) : http://127.0.0.1:8000"
+echo "  예) GET http://127.0.0.1:8000/api/health"
+echo "• 프론트엔드 UI (Vite 개발 서버) : http://127.0.0.1:5173"
+echo "=========================================="
+echo "🚀 모든 서비스가 시작되었습니다 (Backend PID: $BACKEND_PID, Frontend PID: $FRONTEND_PID)"
