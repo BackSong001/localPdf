@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.errors import AppError
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 async def create_job(
     request: Request,
     files: Annotated[list[UploadFile] | None, File()] = None,
+    ocr: bool = Form(True),
 ) -> JSONResponse:
     settings = request.app.state.settings
     manager = request.app.state.manager
@@ -64,7 +65,7 @@ async def create_job(
             await asyncio.to_thread(validate_image_file, destination)
 
         try:
-            job = manager.create_job(job_id, job_dir, len(files))
+            job = manager.create_job(job_id, job_dir, len(files), ocr=ocr)
         except Exception as exc:
             # Convert unexpected errors to INTERNAL_ERROR without leaking details
             raise AppError("INTERNAL_ERROR") from exc
@@ -88,3 +89,23 @@ def download_job(request: Request, job_id: str) -> FileResponse:
         media_type="application/pdf",
         filename=f"localpdf-{job_id}.pdf",
     )
+
+
+@router.get("/{job_id}/markdown")
+def download_job_markdown(request: Request, job_id: str) -> FileResponse:
+    path = request.app.state.manager.download_markdown_path(job_id)
+    return FileResponse(
+        path,
+        media_type="text/markdown; charset=utf-8",
+        filename=f"localpdf-{job_id}.md",
+    )
+
+
+@router.post("/{job_id}/summarize")
+async def summarize_job(request: Request, job_id: str) -> dict:
+    from app.services.llm import summarize_text
+    path = request.app.state.manager.download_markdown_path(job_id)
+    text = path.read_text(encoding="utf-8")
+    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+    provider = body.get("provider") if isinstance(body, dict) else None
+    return summarize_text(text, request.app.state.settings, provider=provider)

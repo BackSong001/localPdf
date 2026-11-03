@@ -37,6 +37,8 @@ class Job:
     completed_at: datetime | None
     dir: Path
     output_path: Path
+    output_md_path: Path
+    ocr: bool = True
 
 
 def _iso_utc(value: datetime) -> str:
@@ -84,7 +86,9 @@ class JobManager:
         self._cleanup_task = None
         self.cleanup_all()
 
-    def create_job(self, job_id: str, job_dir: Path, total: int) -> Job:
+    def create_job(
+        self, job_id: str, job_dir: Path, total: int, ocr: bool = True
+    ) -> Job:
         job = Job(
             id=job_id,
             status="queued",
@@ -95,6 +99,8 @@ class JobManager:
             completed_at=None,
             dir=job_dir,
             output_path=job_dir / "output.pdf",
+            output_md_path=job_dir / "output.md",
+            ocr=ocr,
         )
         with self._lock:
             self._jobs[job_id] = job
@@ -134,6 +140,11 @@ class JobManager:
                 "download_url": (
                     f"/api/jobs/{job.id}/download" if job.status == "done" else None
                 ),
+                "markdown_url": (
+                    f"/api/jobs/{job.id}/markdown"
+                    if (job.status == "done" and job.output_md_path.exists())
+                    else None
+                ),
             }
 
     def download_path(self, job_id: str) -> Path:
@@ -143,6 +154,14 @@ class JobManager:
         if not job.output_path.exists():
             raise AppError("JOB_NOT_FOUND")
         return job.output_path
+
+    def download_markdown_path(self, job_id: str) -> Path:
+        job = self.get_job(job_id)
+        if job.status != "done":
+            raise AppError("JOB_NOT_READY")
+        if not job.output_md_path.exists():
+            raise AppError("JOB_NOT_FOUND")
+        return job.output_md_path
 
     def cleanup_expired(self) -> list[str]:
         now = self._clock()
@@ -233,13 +252,24 @@ class JobManager:
 
         self._set_status(job_id, "converting")
         try:
-            await asyncio.to_thread(
-                self._builder,
-                uploads,
-                output_path,
-                job.dir / "normalized",
-                lambda count: self._set_processed(job_id, count),
-            )
+            try:
+                await asyncio.to_thread(
+                    self._builder,
+                    uploads,
+                    output_path,
+                    job.dir / "normalized",
+                    lambda count: self._set_processed(job_id, count),
+                    ocr=job.ocr,
+                    markdown_path=job.output_md_path,
+                )
+            except TypeError:
+                await asyncio.to_thread(
+                    self._builder,
+                    uploads,
+                    output_path,
+                    job.dir / "normalized",
+                    lambda count: self._set_processed(job_id, count),
+                )
         except asyncio.CancelledError:
             output_path.unlink(missing_ok=True)
             raise

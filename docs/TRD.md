@@ -47,7 +47,8 @@
 | `api/*` | 요청 파싱, 상태 코드/에러 매핑, 응답 직렬화 | 이미지/PDF 처리 로직 |
 | `services/jobs.py` | Job 생성/상태 전이/큐/정리 | 이미지 디코딩 |
 | `services/images.py` | 형식 검증, EXIF, RGB/알파 정규화 | PDF 조립 |
-| `services/pdf_builder.py` | 페이지 생성, 배치 계산, PDF 저장 | 업로드/HTTP |
+| `services/pdf_builder.py` | 페이지 생성, 배치 계산, RapidOCR 텍스트 레이어 삽입, Markdown 생성 | 업로드/HTTP |
+| `services/llm.py` | Gemini/NVIDIA API 호출 및 요약문 생성 | PDF/이미지 처리 |
 | `services/text.py` | PDF 열기/페이지 텍스트 추출 | 파일 저장 |
 | `settings.py` | 환경변수 로딩, 기본값/제한 | 비즈니스 로직 |
 | 프론트엔드 | 입력/순서/진행률/결과 표시 | 파일 형식 신뢰 |

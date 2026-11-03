@@ -241,13 +241,21 @@
 
 > **상태: 제안.** `docs/REQUIREMENT.md`에 `FR-017`(다중 키 failover)과 관련 API 오류 코드가 반영된 뒤 v1 CI에 포함한다. 그 전까지는 mock 기반 단위 테스트로만 작성한다.
 
-### 7.0 FR-016 요약 (v2, 명세 기존 항목)
+### 7.0 FR-016 요약 (LLM)
 
 | ID | 레벨 | 사전 조건 / 절차 | 기대 결과 | 자동화 |
 |---|---|---|---|---|
-| TC-FR-016-a | 단위 | provider mock이 정상 요약 반환 | 요약문/사용 provider/model 반환, 키 미노출 | 예 |
+| TC-FR-016-a | 단위/API | provider mock이 정상 요약 반환 | 요약문/사용 provider/model 반환, 키 미노출 | 예 |
 | TC-FR-016-b | API | API 키 미설정 상태로 요약 요청 | 400 `LLM_NOT_CONFIGURED` | 예 |
-| TC-FR-016-c | 단위 | 텍스트 없음 | 요약 요청 거부 또는 빈 결과 안내 | 예 |
+| TC-FR-016-c | API | 텍스트 없음 | 400 `EMPTY_TEXT` | 예 |
+
+### 7.0.1 FR-017 RapidOCR 기반 Searchable PDF 및 Markdown 생성
+
+| ID | 레벨 | 사전 조건 / 절차 | 기대 결과 | 자동화 |
+|---|---|---|---|---|
+| TC-FR-017-a | 단위 | 글자가 있는 이미지로 PDF 생성 (ocr=True) | PyMuPDF로 페이지 텍스트 추출 시 인식된 텍스트가 추출됨(투명 레이어) | 예 |
+| TC-FR-017-b | API | Job 변환 완료 후 GET `/api/jobs/{id}/markdown` | 200 OK, Content-Type: `text/markdown`, 추출된 텍스트 반환 | 예 |
+| TC-FR-017-c | 단위 | ocr=False로 PDF 생성 | 텍스트 레이어 없이 순수 이미지 PDF 생성 | 예 |
 
 ### 7.1 제안 요구사항
 

@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import health, jobs, pdf
+from app.api import health, jobs, pdf, summarize
 from app.errors import AppError
 from app.services.jobs import JobManager
+from app.services.pdf_ocr_jobs import PdfOcrJobManager
 from app.settings import PROJECT_ROOT, Settings, load_settings
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     manager = JobManager(settings)
+    pdf_ocr_manager = PdfOcrJobManager()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -28,6 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await manager.stop()
+            await pdf_ocr_manager.stop()
 
     app = FastAPI(
         title="localPdf",
@@ -36,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.manager = manager
+    app.state.pdf_ocr_manager = pdf_ocr_manager
 
     app.add_middleware(
         CORSMiddleware,
@@ -48,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(jobs.router)
     app.include_router(pdf.router)
+    app.include_router(summarize.router)
 
     @app.exception_handler(AppError)
     async def handle_app_error(_: Request, exc: AppError) -> JSONResponse:

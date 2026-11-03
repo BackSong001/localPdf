@@ -243,17 +243,34 @@ Job의 임시 산출물은 성공/실패/서버 종료 시 정리된다.
 
 ---
 
-### FR-016 요약 (v2, 선택)
+### FR-016 요약 (LLM)
 
-추출된 텍스트를 무료 LLM API로 요약한다.
+추출된 텍스트 또는 Job의 텍스트를 무료 LLM API(Gemini 또는 NVIDIA NIM)로 요약한다.
 
-**인수 조건 (v2)**
-- Given 텍스트가 있을 때
+**인수 조건**
+- Given 텍스트 또는 완료된 Job이 있을 때
 - When 요약을 요청하면
-- Then Gemini 또는 NVIDIA NIM을 통해 요약문을 반환한다.
-- Then API 키는 `.env`에서만 읽고 로그/응답에 노출하지 않는다.
+- Then Gemini 또는 NVIDIA NIM을 통해 요약문(`summary`), `provider`, `model`을 반환한다.
+- Then API 키가 설정되지 않은 경우 400 `LLM_NOT_CONFIGURED`를 반환하고 설정 방법을 안내한다.
+- Then 텍스트가 비어 있는 경우 400 `EMPTY_TEXT`를 반환한다.
+- Then API 키는 `.env`에서만 읽고 로그/응답에 절대 노출하지 않는다.
 
-**테스트 ID**: `TC-FR-016-a`(정상 요약), `TC-FR-016-b`(키 미설정), `TC-FR-016-c`(텍스트 없음) — v2에서 작성
+**테스트 ID**: `TC-FR-016-a`(정상 요약), `TC-FR-016-b`(키 미설정), `TC-FR-016-c`(텍스트 없음)
+
+---
+
+### FR-017 RapidOCR 기반 Searchable PDF 및 Markdown 생성
+
+이미지 변환 시 RapidOCR을 실행하여 투명 텍스트 레이어를 PDF에 주입하고, 전체 텍스트를 Markdown 파일로 함께 생성한다.
+
+**인수 조건**
+- Given 글자가 포함된 이미지를 변환 요청했을 때 (기본 `ocr=true`)
+- When 변환이 완료되면
+- Then 생성된 PDF 내부에 검색/복사 가능한 투명 텍스트 레이어(`render_mode=3`)가 삽입된다.
+- Then Job 디렉터리에 `output.md` 파일이 함께 생성되고 `/api/jobs/{job_id}/markdown`으로 다운로드할 수 있다.
+- Then Job snapshot에 `markdown_url`이 포함된다.
+
+**테스트 ID**: `TC-FR-017-a`(투명 텍스트 레이어 삽입 확인), `TC-FR-017-b`(Markdown 파일 생성 및 다운로드), `TC-FR-017-c`(OCR 옵션 비활성화 시 기본 이미지 PDF 생성)
 
 ---
 
@@ -314,7 +331,8 @@ Job의 임시 산출물은 성공/실패/서버 종료 시 정리된다.
 | FR-013 | TC-FR-013-a | API 통합 |
 | FR-014 | TC-FR-014-a | 스모크 |
 | FR-015 | TC-FR-015-a | API 통합 |
-| FR-016 | TC-FR-016-a~c | 단위 (v2) |
+| FR-016 | TC-FR-016-a~c | 단위 + API 통합 |
+| FR-017 | TC-FR-017-a~c | 단위 + API 통합 |
 | NFR-001 | TC-NFR-001 | 성능 (slow) |
 | NFR-002 | TC-NFR-002 | 리뷰 + 스모크 |
 | NFR-003 | TC-NFR-003 | 단위 |

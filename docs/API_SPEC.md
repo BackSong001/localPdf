@@ -71,6 +71,7 @@
 | `error` | object | 예 | 항상 포함. `status=error`이면 `{code, message}`, 아니면 `null` |
 | `created_at` | string | 아니오 | ISO 8601 UTC (`...Z`) |
 | `download_url` | string | 예 | 항상 포함. `status=done`이면 `/api/jobs/{job_id}/download`, 아니면 `null` |
+| `markdown_url` | string | 예 | 항상 포함. `status=done`이면 `/api/jobs/{job_id}/markdown`, 아니면 `null` |
 
 ### 1.6 엔드포인트 요약
 
@@ -81,6 +82,7 @@
 | GET | `/api/jobs/{job_id}` | Job 상태 조회 | 200 | 없음 |
 | GET | `/api/jobs/{job_id}/download` | 완성된 PDF 다운로드 | 200 | 없음 |
 | POST | `/api/pdf/text` | PDF 텍스트 추출 | 200 | multipart `file` |
+| POST | `/api/pdf/ocr` | 기존 PDF에 OCR 텍스트 레이어 추가 | 200 | multipart `file` |
 
 ---
 
@@ -132,6 +134,7 @@
 | Part | 타입 | 필수 | 반복 | 제약 |
 |---|---|---|---|---|
 | `files` | file | 예 | 예 (1~1,000) | 지원 이미지 형식, 개별 50 MiB, 전체 2 GiB |
+| `ocr` | boolean | 아니오 | `true` | `false`이면 OCR 텍스트 레이어 없이 이미지 PDF만 생성 |
 
 - 파트 **수신 순서**가 PDF 페이지 순서다.
 - 프론트엔드는 화면에 표시된 순서대로 `files`를 append한다.
@@ -294,6 +297,73 @@ Job 객체(1.5). 상태별 예시는 아래와 같다.
 
 ---
 
+## 5.1 GET `/api/jobs/{job_id}/markdown`
+
+완료된 Job의 Markdown 텍스트 파일을 다운로드한다.
+
+### 요청
+
+| 항목 | 위치 | 타입 | 필수 | 설명 |
+|---|---|---|---|---|
+| `job_id` | path | string | 예 | UUID4 hex |
+
+### 응답 `200 OK`
+
+- `Content-Type`: `text/markdown; charset=utf-8`
+- `Content-Disposition`: `attachment; filename="localpdf-<job_id>.md"`
+
+본문은 추출된 Markdown 텍스트다.
+
+### 오류
+
+| HTTP | 코드 | 조건 |
+|---|---|---|
+| 404 | `JOB_NOT_FOUND` | 존재하지 않거나 TTL 만료 |
+| 409 | `JOB_NOT_READY` | `status`가 `done`이 아님 |
+| 500 | `INTERNAL_ERROR` | 처리되지 않은 예외 |
+
+---
+
+## 5.2 POST `/api/jobs/{job_id}/summarize` 및 POST `/api/summarize`
+
+텍스트 또는 특정 Job의 Markdown 내용을 LLM(Gemini / NVIDIA NIM)으로 요약한다.
+
+### 요청
+
+| 항목 | 값 |
+|---|---|
+| Method | `POST` |
+| Path | `/api/jobs/{job_id}/summarize` 또는 `/api/summarize` |
+| Content-Type | `application/json` |
+
+```json
+{
+  "text": "요약할 텍스트 (api/summarize 호출 시)",
+  "provider": "gemini"
+}
+```
+
+### 응답 `200 OK`
+
+```json
+{
+  "summary": "1. 핵심 요약 내용...",
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite"
+}
+```
+
+### 오류
+
+| HTTP | 코드 | 조건 |
+|---|---|---|
+| 400 | `LLM_NOT_CONFIGURED` | 지정된 provider의 API 키가 .env에 없음 |
+| 400 | `EMPTY_TEXT` | 요약할 텍스트가 없음 |
+| 429 | `LLM_RATE_LIMITED` | LLM API 사용량 초과 |
+| 502 | `LLM_UPSTREAM_ERROR` | LLM 상위 서버 오류 |
+
+---
+
 ## 6. POST `/api/pdf/text`
 
 PDF를 업로드해 텍스트 레이어를 추출한다. OCR은 수행하지 않는다.
@@ -370,7 +440,61 @@ curl -X POST http://127.0.0.1:8000/api/pdf/text \
 
 ---
 
-## 7. 오류 코드 전체
+## 7. POST `/api/pdf/ocr`
+
+기존 PDF의 각 페이지를 `pdf2image`로 렌더링하고 `pytesseract`로 OCR한 결과를
+투명 텍스트 레이어로 추가한다. 원본 PDF의 시각적 내용은 유지된다.
+OCR 언어는 한국어 `kor`로 고정되어 있다. Tesseract의 `kor` 언어 데이터를
+설치해야 한다.
+
+### 요청
+
+| 항목 | 값 |
+|---|---|
+| Content-Type | `multipart/form-data` |
+| Path | `/api/pdf/ocr` |
+
+| Part | 타입 | 필수 | 제약 |
+|---|---|---|---|
+| `file` | file | 예 | PDF, 100 MiB, 2,000페이지 |
+
+### 응답 `202 Accepted`
+
+```json
+{
+  "job_id": "...",
+  "status": "queued",
+  "total": 12,
+  "processed": 0,
+  "error": null,
+  "download_url": null
+}
+```
+
+페이지별 진행률은 `GET /api/pdf/ocr/{job_id}`로 조회한다.
+
+완료되면 `download_url`의 PDF를 다운로드한다.
+
+### 오류
+
+`/api/pdf/text`와 동일한 PDF 업로드 오류에 더해, Python 패키지 또는 시스템
+Tesseract가 설치되지 않으면 `503 OCR_NOT_CONFIGURED`를 반환한다.
+
+### 예시
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/pdf/ocr \
+  -F "file=@scanned-document.pdf"
+```
+
+```bash
+curl http://127.0.0.1:8000/api/pdf/ocr/<job_id>
+curl http://127.0.0.1:8000/api/pdf/ocr/<job_id>/download -o searchable.pdf
+```
+
+---
+
+## 8. 오류 코드 전체
 
 | 코드 | HTTP | 설명 |
 |---|---|---|
@@ -384,6 +508,7 @@ curl -X POST http://127.0.0.1:8000/api/pdf/text \
 | `INVALID_PDF` | 422 | PDF 손상/암호화/열기 실패 |
 | `PDF_TOO_LARGE` | 413 | PDF 크기 초과 |
 | `PDF_TOO_MANY_PAGES` | 422 | PDF 페이지 수 초과 |
+| `OCR_NOT_CONFIGURED` | 503 | Python OCR 패키지 또는 Tesseract 미설치 |
 | `JOB_NOT_FOUND` | 404 | Job 없음/TTL 만료 |
 | `JOB_NOT_READY` | 409 | 미완료 Job 다운로드 시도 |
 | `CONVERSION_FAILED` | — | Job 내부 변환 실패 (`Job.error.code`) |
@@ -391,7 +516,7 @@ curl -X POST http://127.0.0.1:8000/api/pdf/text \
 
 ---
 
-## 8. v2 예약 (미구현)
+## 9. v2 예약 (미구현)
 
 아래 엔드포인트는 v2 요약 기능용이며 v1에서는 제공하지 않는다.
 
